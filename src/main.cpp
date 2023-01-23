@@ -55,20 +55,36 @@ void Grid::read()
     }
 }
 
-void draw_top() {
-    std::cout <<"╔═══╤═══╤═══╦═══╤═══╤═══╦═══╤═══╤═══╗\n";
-}
+// void draw_top() {
+//     std::cout <<"╔═══╤═══╤═══╦═══╤═══╤═══╦═══╤═══╤═══╗\n";
+// }
 
-void draw_mid() {
-    std::cout <<"╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣\n";
+// void draw_bot() {
+//     std::cout <<"╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝\n";
+// }
+
+// void draw_mid() {
+//     std::cout <<"╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣\n";
+// }
+
+// void draw_regular() {
+//     std::cout <<"╟───┼───┼───╫───┼───┼───╫───┼───┼───╢\n";
+// }
+// heavy
+void draw_top() {
+    std::cout <<"┏━━━┯━━━┯━━━┳━━━┯━━━┯━━━┳━━━┯━━━┯━━━┓\n";
 }
 
 void draw_bot() {
-    std::cout <<"╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝\n";
+    std::cout <<"┗━━━┷━━━┷━━━┻━━━┷━━━┷━━━┻━━━┷━━━┷━━━┛\n";
+}
+
+void draw_mid() {
+    std::cout <<"┣━━━┿━━━┿━━━╋━━━┿━━━┿━━━╋━━━┿━━━┿━━━┫\n";
 }
 
 void draw_regular() {
-    std::cout <<"╟───┼───┼───╫───┼───┼───╫───┼───┼───╢\n";
+    std::cout <<"┠───┼───┼───╂───┼───┼───╂───┼───┼───┨\n";
 }
 
 std::string to_rep(int8_t val)
@@ -111,25 +127,29 @@ void Grid::draw()
             draw_mid();
         }
         std::cout
-            << "║ "
-            << to_rep(grid[i*GRID_SIZE + 0])
+            // << "║ "
+            << "┃ "
+            << to_rep(at(i, 0))
             << " │ "
-            << to_rep(grid[i*GRID_SIZE + 1])
+            << to_rep(at(i, 1))
             << " │ "
-            << to_rep(grid[i*GRID_SIZE + 2])
-            << " ║ "
-            << to_rep(grid[i*GRID_SIZE + 3])
+            << to_rep(at(i, 2))
+            // << " ║ "
+            << " ┃ "
+            << to_rep(at(i, 3))
             << " │ "
-            << to_rep(grid[i*GRID_SIZE + 4])
+            << to_rep(at(i, 4))
             << " │ "
-            << to_rep(grid[i*GRID_SIZE + 5])
-            << " ║ "
-            << to_rep(grid[i*GRID_SIZE + 6])
+            << to_rep(at(i, 5))
+            // << " ║ "
+            << " ┃ "
+            << to_rep(at(i, 6))
             << " │ "
-            << to_rep(grid[i*GRID_SIZE + 7])
+            << to_rep(at(i, 7))
             << " │ "
-            << to_rep(grid[i*GRID_SIZE + 8])
-            << " ║\n";
+            << to_rep(at(i, 8))
+            << " ┃\n";
+            // << " ║\n";
         // std::cout  <<"\n";
 
         if (i == 8) {
