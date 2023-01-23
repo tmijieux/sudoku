@@ -1,7 +1,9 @@
 #include <iostream>
 #include <set>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
+
 #include <cstring>
 #include <cstdint>
 
@@ -15,6 +17,14 @@ struct Candidate {
     int i; //position i
     int j; //position j
     std::set<int8_t> values;
+    int won_holes;
+
+    Candidate():
+        i{0},
+        j{0},
+        won_holes{0}
+    {
+    }
 };
 
 
@@ -32,10 +42,11 @@ struct Grid {
     void read();
     void draw() const;
     void draw_simple() const;
+    void draw_simple(char *) const;
     void basic_fill();
-    void fill_basic_candidates(std::vector<Candidate> &candidates);
+    bool fill_basic_candidates(std::vector<Candidate> &candidates);
 
-    void solve(int depth=0);
+    void solve(std::unordered_map<std::string,bool> &already_done, std::string &key, int depth=0);
     int get_num_hole();
 
 };
@@ -133,6 +144,22 @@ void Grid::draw_simple() const
     std::cout<<"\n";
 }
 
+void Grid::draw_simple(char *out) const
+{
+    int k = 0;
+    for (auto i = 0; i < GRID_SIZE; ++i)
+    {
+        for (auto j = 0; j < GRID_SIZE; ++j) {
+            out[k++] = to_rep_simple( at(i,j))[0];
+        }
+        if (i < GRID_SIZE-1) {
+            out[k++] = '/';
+        }
+    }
+    std::cout<<"\n";
+}
+
+
 void Grid::draw() const
 {
     for (auto i = 0; i < GRID_SIZE; ++i)
@@ -201,7 +228,7 @@ int Grid::get_num_hole()
     return num_hole;
 }
 
-void Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
+bool Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
 {
     //candidates.reserve(num_hole);
     candidates.resize(BUF_SIZE);
@@ -254,23 +281,26 @@ void Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
                 }
             }
 
-            if (c.values.size() == 1) {
-                set(i,j, *c.values.begin());
-                found_with_basic_candidates = true;
-                square_found = true;
-                ++num_found_with_basic;
-            }
-
             if (c.values.size() == 0) {
                 // std::cout<<"unsolvable!\n";
-                return;
+                return false;
+            }
+            if (c.values.size() == 1) {
+                set(i, j, *c.values.begin());
+                return false;
             }
         }
     }
+    return true;
 }
 
-void Grid::solve(int depth)
+void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string &key, int depth)
 {
+    auto it = already_done.find(key);
+    if (it != already_done.end()) {
+        return;
+    }
+
     int previous_num_hole = 0;
     int num_hole = get_num_hole();
     if (num_hole == 0) {
@@ -339,6 +369,7 @@ void Grid::solve(int depth)
 
                 if (c.values.size() == 0) {
                     // std::cout<<"unsolvable!\n";
+                    already_done[key] = true;
                     return;
                 }
             }
@@ -388,9 +419,9 @@ void Grid::solve(int depth)
         previous_num_hole = num_hole;
         num_hole = get_num_hole();
 
-        std::cout<< "basic="<<num_found_with_basic
-                 << " single="<<num_found_with_single
-                 << " remaining_holes="<<num_hole<<"\n";
+        // std::cout<< "basic="<<num_found_with_basic
+        //          << " single="<<num_found_with_single
+        //          << " remaining_holes="<<num_hole<<"\n";
         if (num_hole == 0) {
             std::cout<<"solved!\n";
             break;
@@ -402,7 +433,11 @@ void Grid::solve(int depth)
         // try to to perform arbitrary filling and backtrack if not working
         std::vector<Candidate> candidates;
         std::vector<Candidate> candidates2;
-        fill_basic_candidates(candidates);
+        bool ok = fill_basic_candidates(candidates);
+        if (!ok) {
+            already_done[key] = true;
+            return;
+        }
         for (auto k = 0; k < BUF_SIZE; ++k) {
             auto i = k / GRID_SIZE;
             auto j = k % GRID_SIZE;
@@ -424,25 +459,59 @@ void Grid::solve(int depth)
             candidates2.end(),
             [](const auto &a, const auto &b) {
                 return a.values.size() < b.values.size();
-                //return a.values.size() > b.values.size();
             });
-        for (auto &c : candidates2) {
-            std::cout <<"at ("<<c.i<<","<<c.j<<") num_candidates="<<c.values.size()<< " [ ";
-            for (auto &v: c.values) {
-                std::cout<<(int)v<< " ";
-            }
-            std::cout<<"]\n";
-        }
+
         for (auto &c : candidates2) {
             for (auto &v : c.values) {
                 Grid g = *this;
                 g.set(c.i, c.j, v);
-                std::cout<<"try SET "<<v<< "at ("<<c.i<<","<<c.j<<") at depth="<<depth<<"\n";
-                g.solve(depth+1);
+                std::vector<Candidate> cc;
+                g.fill_basic_candidates(cc);
+                auto new_holes = g.get_num_hole();
+                c.won_holes += num_hole - new_holes;
+            }
+            c.won_holes -= c.values.size();
+        }
+
+        std::sort(
+            candidates2.begin(),
+            candidates2.end(),
+            [](const auto &a, const auto &b) {
+                if (a.won_holes > b.won_holes) {
+                    return true;
+                }
+                if (a.won_holes < b.won_holes) {
+                    return false;
+                }
+                return a.values.size() < b.values.size();
+            });
+        for (auto &c : candidates2) {
+            // std::cout <<"at ("<<c.i<<","<<c.j<<") num_candidates="<<c.values.size()<< " [ ";
+            // for (auto &v: c.values) {
+            //     std::cout<<(int)v<< " ";
+            // }
+            // std::cout<<"] won_holes="<<c.won_holes<<"\n";
+        }
+
+
+        for (auto &c : candidates2) {
+            for (auto &v : c.values) {
+                Grid g = *this;
+                g.set(c.i, c.j, v);
+                // std::cout<<"try SET "<<(int)v<< " at ("<<c.i<<","<<c.j<<") at depth="<<depth<<"\n";
+                std::string q = key;
+                q[c.i*GRID_SIZE+c.j+c.i] = to_rep_simple(v)[0];
+                if (q == key) {
+                    throw std::exception();
+                }
+
+                // std::cout<<"key="<<key<<" q="<<q<<"\n";
+                g.solve(already_done, q, depth+1);
                 if (g.get_num_hole() == 0) {
                     *this = g;
                     return;
                 }
+                //g.set(c.i, c.j, 0);
             }
         }
     }
@@ -457,9 +526,14 @@ void show_empty_grid(void)
 int main(int argc, char *argv[])
 {
     Grid g;
+    std::unordered_map<std::string,bool> already_done;
     g.read();
     g.draw();
-    g.solve();
+
+    char rep[100] = {0};
+    g.draw_simple(rep);
+    std::string key{rep};
+    g.solve(already_done, key);
     g.draw();
     return 0;
 }
