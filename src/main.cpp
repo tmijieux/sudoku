@@ -33,25 +33,34 @@ struct Candidate {
 
 
 struct Grid {
-    int8_t grid[BUF_SIZE];
+    int8_t m_grid[BUF_SIZE];
+    uint16_t m_candidates[BUF_SIZE];
 
     Grid()
     {
-        std::memset(grid, 0, sizeof(grid));
+        std::memset(m_grid, 0, sizeof(m_grid));
+        std::memset(m_candidates, 0, sizeof(m_candidates));
     }
 
-    uint8_t at(int i, int j) const { return grid[i*GRID_SIZE+j]; }
-    void set(int i, int j, int8_t val) { grid[i*GRID_SIZE+j] = val; }
+    uint8_t at(int i, int j) const { return m_grid[i*GRID_SIZE+j]; }
+    void set(int i, int j, int8_t val) { m_grid[i*GRID_SIZE+j] = val; }
+
+    uint16_t candidate_at(int i, int j) const { return m_candidates[i*GRID_SIZE+j]; }
+    void candidate_setfull(int i, int j, int16_t val) { m_candidates[i*GRID_SIZE+j] = 0x1FF; }
+    void candidate_remove(int i, int j, int8_t val) { m_candidates[i*GRID_SIZE+j] &= ~(1 << (val-1)); }
+    bool has_candidate(int i, int j, int8_t val) const { return (m_candidates[i*GRID_SIZE+j] & (1 << (val-1))) != 0; }
 
     void read();
     void draw() const;
     void draw_simple() const;
     void draw_simple(char *) const;
     void basic_fill();
-    bool fill_basic_candidates(std::vector<Candidate> &candidates);
+    bool fill_basic_candidates(std::vector<Candidate> &candidates, size_t& num_slot);
 
     void solve(std::unordered_map<std::string,bool> &already_done, std::string &key, int depth=0);
     size_t get_num_slot();
+
+    bool verify_grid() const;
 
 };
 
@@ -65,15 +74,15 @@ void Grid::read()
         char c = std::cin.get();
         if ('1' <= c && c <= '9') {
             int val = c - '0';
-            grid[i++] = val;
+            m_grid[i++] = val;
         } else if (c == ' ') {
             ++num_space;
             if (num_space == 3) {
-                grid[i++] = 0;
+                m_grid[i++] = 0;
                 num_space = 0;
             }
         } else if (c == '-') {
-            grid[i++] = 0;
+            m_grid[i++] = 0;
         } else {
             num_space = 0;
         }
@@ -212,7 +221,7 @@ void Grid::basic_fill()
     {
         for (auto j = 0; j < GRID_SIZE; ++j)
         {
-            grid[i*GRID_SIZE+j] = (i+j)%GRID_SIZE + 1;
+            m_grid[i*GRID_SIZE+j] = (i+j)%GRID_SIZE + 1;
         }
     }
 }
@@ -231,75 +240,97 @@ size_t Grid::get_num_slot()
     return num_slot;
 }
 
-bool Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
+bool Grid::fill_basic_candidates(std::vector<Candidate> &candidates, size_t& num_slot)
 {
-    //candidates.reserve(num_slot);
-    candidates.resize(BUF_SIZE);
-    int32_t num_found_with_basic = 0;
-    int32_t num_found_with_single = 0;
-
-
-    bool found_with_basic_candidates = false;
-
     // fill basic_candidates
-    for (auto i = 0; i < GRID_SIZE; ++i)
+    for (auto k = 0; k < BUF_SIZE; ++k)
     {
-        for (auto j = 0; j < GRID_SIZE; ++j)
-        {
-            if (at(i, j) != 0) {
-                // not a slot
-                continue;
-            }
-            bool square_found = false;
-            Candidate &c = candidates[i*GRID_SIZE+j];
-            for (int8_t v = 1; v< GRID_SIZE+1; ++v) {
-                c.values.emplace(v);
-            }
+        int i = k / GRID_SIZE;
+        int j = k % GRID_SIZE;
+        if (at(i, j) != 0) {
+            // not a slot
+            continue;
+        }
 
-            // remove candidates for row
-            for (int k = 0; k < GRID_SIZE; ++k) {
-                auto val = at(i, k);
+        // fill all candidates
+        Candidate& c = candidates[i * GRID_SIZE + j];
+        for (int8_t v = 1; v < GRID_SIZE + 1; ++v) {
+            c.values.emplace(v);
+        }
+
+        // remove candidates for row
+        for (int k = 0; k < GRID_SIZE; ++k) {
+            auto val = at(i, k);
+            if (val == 0) continue;
+            // already in same row
+            c.values.erase(val);
+        }
+
+        // remove candidates for column
+        for (int k = 0; k < GRID_SIZE; ++k) {
+            auto val = at(k, j);
+            if (val == 0) continue;
+            // already in same column
+            c.values.erase(val);
+        }
+
+        // remove candidates for square
+        auto IS = i / 3;
+        auto JS = j / 3;
+        for (int is = 0; is < 3; ++is) {
+            for (int js = 0; js < 3; ++js) {
+                auto val = at(3 * IS + is, 3 * JS + js);
                 if (val == 0) continue;
-                // already in same row
+                // already in same square
                 c.values.erase(val);
             }
+        }
 
-            // remove candidates for column
-            for (int k = 0; k < GRID_SIZE; ++k) {
-                auto val = at(k, j);
-                if (val == 0) continue;
-                // already in same column
-                c.values.erase(val);
+        auto vsize = c.values.size();
+        if (vsize == 0) {
+            // std::cout<<"unsolvable!\n";
+            //already_done[key] = true;
+            return false;
+        }
+
+        if (vsize == 1) {
+            auto val = *c.values.begin();
+            c.values.clear();
+            --num_slot;
+            set(i, j, val);
+            if (num_slot == 0) {
+                return true;
             }
-
-            // remove candidates for square
+            // propagate back to row i
+            for (int m = 0; m < GRID_SIZE; ++m)
+            {
+                Candidate& d = candidates[i * GRID_SIZE + m];
+                d.values.erase(val);
+            }
+            // propagate back to col j
+            for (int m = 0; m < GRID_SIZE; ++m)
+            {
+                Candidate& d = candidates[m * GRID_SIZE + j];
+                d.values.erase(val);
+            }
+            // propagate back to square of ij
             auto IS = i / 3;
             auto JS = j / 3;
             for (int is = 0; is < 3; ++is) {
                 for (int js = 0; js < 3; ++js) {
-                    auto val = at(3*IS+is, 3*JS+js);
-                    if (val == 0) continue;
-                    // already in same square
-                    c.values.erase(val);
+                    Candidate& d = candidates[is * GRID_SIZE + js];
+                    d.values.erase(val);
                 }
-            }
-
-            if (c.values.size() == 0) {
-                // std::cout<<"unsolvable!\n";
-                return false;
-            }
-            if (c.values.size() == 1) {
-                set(i, j, *c.values.begin());
-                // fast quit is more efficient for empty grids
-                // this return may change in the future
-                return true;
             }
         }
     }
     return true;
 }
 
-void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string &key, int depth)
+void Grid::solve(
+    std::unordered_map<std::string,bool> &already_done,
+    std::string &key,
+    int depth)
 {
     auto it = already_done.find(key);
     if (it != already_done.end()) {
@@ -311,215 +342,205 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
     if (num_slot == 0) {
         return;
     }
+    std::vector<Candidate> candidates;
+    candidates.resize(BUF_SIZE);
+
     // std::cout<<num_slot<<" slots !\n";
-    while (num_slot != previous_num_slot) {
-        std::vector<Candidate> candidates;
-        //candidates.reserve(num_slot);
-        candidates.resize(BUF_SIZE);
-        int32_t num_found_with_basic = 0;
-        int32_t num_found_with_single = 0;
-
-
-        bool found_with_basic_candidates = false;
-
-        // fill basic_candidates
-        for (auto i = 0; i < GRID_SIZE; ++i)
-        {
-            for (auto j = 0; j < GRID_SIZE; ++j)
-            {
-                if (at(i, j) != 0) {
-                    // not a slot
-                    continue;
-                }
-                bool square_found = false;
-                Candidate &c = candidates[i*GRID_SIZE+j];
-                for (int8_t v = 1; v< GRID_SIZE+1; ++v) {
-                    c.values.emplace(v);
-                }
-
-                // remove candidates for row
-                for (int k = 0; k < GRID_SIZE; ++k) {
-                    auto val = at(i, k);
-                    if (val == 0) continue;
-                    // already in same row
-                    c.values.erase(val);
-                }
-
-                // remove candidates for column
-                for (int k = 0; k < GRID_SIZE; ++k) {
-                    auto val = at(k, j);
-                    if (val == 0) continue;
-                    // already in same column
-                    c.values.erase(val);
-                }
-
-                // remove candidates for square
-                auto IS = i / 3;
-                auto JS = j / 3;
-                for (int is = 0; is < 3; ++is) {
-                    for (int js = 0; js < 3; ++js) {
-                        auto val = at(3*IS+is, 3*JS+js);
-                        if (val == 0) continue;
-                        // already in same square
-                        c.values.erase(val);
-                    }
-                }
-
-                if (c.values.size() == 1) {
-                    set(i,j, *c.values.begin());
-                    found_with_basic_candidates = true;
-                    square_found = true;
-                    ++num_found_with_basic;
-                }
-
-                if (c.values.size() == 0) {
-                    // std::cout<<"unsolvable!\n";
-                    already_done[key] = true;
-                    return;
-                }
-            }
-        }
-        // find candidates that appear in a single place
-        for (auto v = 1; v < GRID_SIZE+1; ++v)
-        {
-            for (auto i = 0; i < GRID_SIZE; ++i)
-            {
-                int num_appearing = 0;
-                // in row i
-                int pos = -1;
-                for (int j = 0; j < GRID_SIZE; ++j) {
-                    auto &c = candidates[i*GRID_SIZE+j];
-                    if (c.values.count(v)) {
-                        ++num_appearing;
-                        pos = j;
-                    }
-                }
-                //std::cout<<"candidate v="<<v<< " in row "<<i<<" num="<<num_appearing<<"\n";
-                if (num_appearing == 1) {
-                    set(i, pos, v);
-                    candidates[i*GRID_SIZE+pos].values.clear();
-                    ++num_found_with_single;
-                    break;
-                }
-                num_appearing = 0;
-
-                // in col i
-                pos = -1;
-                for (int j = 0; j < GRID_SIZE; ++j) {
-                    auto &c = candidates[j*GRID_SIZE+i];
-                    if (c.values.count(v)) {
-                        ++num_appearing;
-                        pos = j;
-                    }
-                }
-                //std::cout<<"candidate v="<<v<< " in col "<<i<<" num="<<num_appearing<<"\n";
-                if (num_appearing == 1) {
-                    set(pos, i, v);
-                    candidates[pos*GRID_SIZE+i].values.clear();
-                    ++num_found_with_single;
-                    break;
-                }
-            }
-        }
+    while (num_slot != previous_num_slot)
+    {
         previous_num_slot = num_slot;
-        num_slot = get_num_slot();
-
-        // std::cout<< "basic="<<num_found_with_basic
-        //          << " single="<<num_found_with_single
-        //          << " remaining_slots="<<num_slot<<"\n";
-        if (num_slot == 0) {
-            std::cout<<"solved!\n";
-            break;
-        }
-
-    }
-    if (num_slot != 0) {
-        // basic heuristic not enough
-        // try to to perform arbitrary filling and backtrack if not working
-        std::vector<Candidate> candidates;
-        std::vector<Candidate> candidates2;
-        bool ok = fill_basic_candidates(candidates);
-        if (!ok) {
+        if (!fill_basic_candidates(candidates, num_slot)) {
             already_done[key] = true;
             return;
         }
-        for (auto k = 0; k < BUF_SIZE; ++k) {
-            auto i = k / GRID_SIZE;
-            auto j = k % GRID_SIZE;
-            auto &c = candidates[i*GRID_SIZE+j];
-            auto size = c.values.size();
-            if (size > 0) {
-                // std::cout <<"at ("<<i<<","<<j<<") num_candidates="<<size<< " [ ";
-                // for (auto &v: c.values) {
-                //     std::cout<<(int)v<< " ";
-                // }
-                // std::cout<<"]\n";
-                c.i = i;
-                c.j = j;
-                candidates2.push_back(c);
+    }
+
+    // find candidates that appear in a single place
+    for (auto v = 1; v < GRID_SIZE+1; ++v)
+    {
+        for (auto i = 0; i < GRID_SIZE; ++i)
+        {
+            int num_appearing = 0;
+            // in row i
+            int pos = -1;
+            for (int j = 0; j < GRID_SIZE; ++j) {
+                auto &c = candidates[i*GRID_SIZE+j];
+                if (c.values.count(v)) {
+                    ++num_appearing;
+                    pos = j;
+                }
             }
-        }
-        std::sort(
-            candidates2.begin(),
-            candidates2.end(),
-            [](const auto &a, const auto &b) {
-                return a.values.size() < b.values.size();
-            });
-
-        for (auto &c : candidates2) {
-            for (auto &v : c.values) {
-                Grid g = *this;
-                g.set(c.i, c.j, v);
-                std::vector<Candidate> cc;
-                g.fill_basic_candidates(cc);
-                auto new_slots = g.get_num_slot();
-                c.won_slots += num_slot - new_slots;
+            //std::cout<<"candidate v="<<v<< " in row "<<i<<" num="<<num_appearing<<"\n";
+            if (num_appearing == 1) {
+                set(i, pos, v);
+                candidates[i*GRID_SIZE+pos].values.clear();
+                break;
             }
-            c.won_slots -= c.values.size();
-        }
+            num_appearing = 0;
 
-        std::sort(
-            candidates2.begin(),
-            candidates2.end(),
-            [](const auto &a, const auto &b) {
-                if (a.won_slots > b.won_slots) {
-                    return true;
+            // in col i
+            pos = -1;
+            for (int j = 0; j < GRID_SIZE; ++j) {
+                auto &c = candidates[j*GRID_SIZE+i];
+                if (c.values.count(v)) {
+                    ++num_appearing;
+                    pos = j;
                 }
-                if (a.won_slots < b.won_slots) {
-                    return false;
-                }
-                return a.values.size() < b.values.size();
-            });
-        for (auto &c : candidates2) {
-            // std::cout <<"at ("<<c.i<<","<<c.j<<") num_candidates="<<c.values.size()<< " [ ";
-            // for (auto &v: c.values) {
-            //     std::cout<<(int)v<< " ";
-            // }
-            // std::cout<<"] won_slots="<<c.won_slots<<"\n";
-        }
-
-
-        for (auto &c : candidates2) {
-            for (auto &v : c.values) {
-                Grid g = *this;
-                g.set(c.i, c.j, v);
-                // std::cout<<"try SET "<<(int)v<< " at ("<<c.i<<","<<c.j<<") at depth="<<depth<<"\n";
-                std::string q = key;
-                q[c.i*GRID_SIZE+c.j+c.i] = to_rep_simple(v)[0];
-                if (q == key) {
-                    throw std::exception();
-                }
-
-                // std::cout<<"key="<<key<<" q="<<q<<"\n";
-                g.solve(already_done, q, depth+1);
-                if (g.get_num_slot() == 0) {
-                    *this = g;
-                    return;
-                }
-                //g.set(c.i, c.j, 0);
+            }
+            //std::cout<<"candidate v="<<v<< " in col "<<i<<" num="<<num_appearing<<"\n";
+            if (num_appearing == 1) {
+                set(pos, i, v);
+                candidates[pos*GRID_SIZE+i].values.clear();
+                //++num_found_with_single;
+                break;
             }
         }
     }
+    num_slot = get_num_slot();
+
+    // std::cout<< "basic="<<num_found_with_basic
+    //          << " single="<<num_found_with_single
+    //          << " remaining_slots="<<num_slot<<"\n";
+    if (num_slot == 0) {
+        std::cout<<"solved!\n";
+        return;
+    }
+    // basic heuristic not enough
+    // try to to perform arbitrary filling and backtrack if not working
+    std::vector<Candidate> candidates2;
+    for (auto k = 0; k < BUF_SIZE; ++k) {
+        auto i = k / GRID_SIZE;
+        auto j = k % GRID_SIZE;
+        auto &c = candidates[i*GRID_SIZE+j];
+        auto size = c.values.size();
+        if (size > 0) {
+            // std::cout <<"at ("<<i<<","<<j<<") num_candidates="<<size<< " [ ";
+            // for (auto &v: c.values) {
+            //     std::cout<<(int)v<< " ";
+            // }
+            // std::cout<<"]\n";
+            c.i = i;
+            c.j = j;
+            candidates2.push_back(c);
+        }
+    }
+    std::sort(
+        candidates2.begin(),
+        candidates2.end(),
+        [](const auto &a, const auto &b) {
+            return a.values.size() < b.values.size();
+        });
+
+    for (auto &c : candidates2) {
+        for (auto &v : c.values) {
+            size_t new_slots = num_slot;
+            Grid g = *this;
+            g.set(c.i, c.j, v);
+            std::vector<Candidate> cc{ BUF_SIZE };
+            g.fill_basic_candidates(cc, new_slots);
+            c.won_slots += num_slot - new_slots;
+        }
+        c.won_slots -= c.values.size();
+    }
+
+    std::sort(
+        candidates2.begin(),
+        candidates2.end(),
+        [](const auto &a, const auto &b) {
+            if (a.won_slots > b.won_slots) {
+                return true;
+            }
+            if (a.won_slots < b.won_slots) {
+                return false;
+            }
+            return a.values.size() < b.values.size();
+        });
+    for (auto &c : candidates2) {
+        // std::cout <<"at ("<<c.i<<","<<c.j<<") num_candidates="<<c.values.size()<< " [ ";
+        // for (auto &v: c.values) {
+        //     std::cout<<(int)v<< " ";
+        // }
+        // std::cout<<"] won_slots="<<c.won_slots<<"\n";
+    }
+
+    for (auto &c : candidates2)
+    {
+        for (auto &v : c.values)
+        {
+            Grid g = *this;
+            g.set(c.i, c.j, v);
+            // std::cout<<"try SET "<<(int)v<< " at ("<<c.i<<","<<c.j<<") at depth="<<depth<<"\n";
+            std::string q = key;
+            q[c.i*GRID_SIZE+c.j+c.i] = to_rep_simple(v)[0];
+            if (q == key) {
+                throw std::exception();
+            }
+
+            // std::cout<<"key="<<key<<" q="<<q<<"\n";
+            g.solve(already_done, q, depth+1);
+            if (g.get_num_slot() == 0) {
+                *this = g;
+                return;
+            }
+            //g.set(c.i, c.j, 0);
+        }
+    }
+}
+
+bool Grid::verify_grid() const
+{
+    for (int k = 0; k < GRID_SIZE; ++k)
+    {
+        // row k
+        for (int v = 1; v < GRID_SIZE + 1; ++v)
+        {
+            int count = 0;
+
+            for (int m = 0; m < GRID_SIZE; ++m)
+            {
+                count += at(k, m) == v;
+            }
+            if (count > 1) {
+                return false;
+            }
+        }
+        // col k
+        for (int v = 1; v < GRID_SIZE + 1; ++v)
+        {
+            int count = 0;
+
+            for (int m = 0; m < GRID_SIZE; ++m)
+            {
+                count += at(m, k) == v;
+            }
+            if (count > 1) {
+                return false;
+            }
+        }
+    }
+
+    for (int I = 0; I < GRID_SIZE; I+=3)
+    {
+        for (int J = 0; J < GRID_SIZE; J+=3)
+        {
+            for (int v = 1; v < GRID_SIZE + 1; ++v)
+            {
+                int count = 0;
+                for (int i = I; i < I + 3; ++i)
+                {
+                    for (int j = J; j < J + 3; ++j)
+                    {
+                        count += at(i, j) == v;
+                    }
+                }
+                if (count > 1)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
 }
 
 void show_empty_grid(void)
@@ -530,18 +551,31 @@ void show_empty_grid(void)
 
 int main(int argc, char *argv[])
 {
-#ifdef _WIN32
+    #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
-#endif
+    #endif
     Grid g;
     std::unordered_map<std::string,bool> already_done;
     g.read();
     g.draw();
+    if (g.verify_grid()) {
+        std::cout << "valid!\n";
+    }
+    else {
+        std::cout << "invalid!\n";
+        return 1;
+    }
 
     char rep[100] = {0};
     g.draw_simple(rep);
     std::string key{rep};
     g.solve(already_done, key);
     g.draw();
+    if (g.verify_grid()) {
+        std::cout << "valid!\n";
+    }
+    else {
+        std::cout << "invalid!\n";
+    }
     return 0;
 }
