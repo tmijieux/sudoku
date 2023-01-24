@@ -3,9 +3,13 @@
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
+#include <string>
 
 #include <cstring>
 #include <cstdint>
+#ifdef _WIN32
+#include  <Windows.h>
+#endif
 
 
 enum CONSTANTS {
@@ -525,6 +529,9 @@ void show_empty_grid(void)
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     Grid g;
     std::unordered_map<std::string,bool> already_done;
     g.read();
