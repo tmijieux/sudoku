@@ -21,12 +21,12 @@ struct Candidate {
     int i; //position i
     int j; //position j
     std::set<int8_t> values;
-    int won_holes;
+    size_t won_slots;
 
     Candidate():
         i{0},
         j{0},
-        won_holes{0}
+        won_slots{0}
     {
     }
 };
@@ -51,13 +51,12 @@ struct Grid {
     bool fill_basic_candidates(std::vector<Candidate> &candidates);
 
     void solve(std::unordered_map<std::string,bool> &already_done, std::string &key, int depth=0);
-    int get_num_hole();
+    size_t get_num_slot();
 
 };
 
 void Grid::read()
 {
-    char c;
     int i = 0;
     int num_space = 0;
 
@@ -219,22 +218,22 @@ void Grid::basic_fill()
 }
 
 
-int Grid::get_num_hole()
+size_t Grid::get_num_slot()
 {
-    int num_hole = 0;
+    size_t num_slot = 0;
     for (auto i = 0; i < GRID_SIZE; ++i)
     {
         for (auto j = 0; j < GRID_SIZE; ++j)
         {
-            num_hole += at(i, j) == 0;
+            num_slot += at(i, j) == 0;
         }
     }
-    return num_hole;
+    return num_slot;
 }
 
 bool Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
 {
-    //candidates.reserve(num_hole);
+    //candidates.reserve(num_slot);
     candidates.resize(BUF_SIZE);
     int32_t num_found_with_basic = 0;
     int32_t num_found_with_single = 0;
@@ -248,7 +247,7 @@ bool Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
         for (auto j = 0; j < GRID_SIZE; ++j)
         {
             if (at(i, j) != 0) {
-                // not a hole
+                // not a slot
                 continue;
             }
             bool square_found = false;
@@ -291,7 +290,9 @@ bool Grid::fill_basic_candidates(std::vector<Candidate> &candidates)
             }
             if (c.values.size() == 1) {
                 set(i, j, *c.values.begin());
-                return false;
+                // fast quit is more efficient for empty grids
+                // this return may change in the future
+                return true;
             }
         }
     }
@@ -305,15 +306,15 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
         return;
     }
 
-    int previous_num_hole = 0;
-    int num_hole = get_num_hole();
-    if (num_hole == 0) {
+    size_t previous_num_slot = 0;
+    size_t num_slot = get_num_slot();
+    if (num_slot == 0) {
         return;
     }
-    // std::cout<<num_hole<<" holes !\n";
-    while (num_hole != previous_num_hole) {
+    // std::cout<<num_slot<<" slots !\n";
+    while (num_slot != previous_num_slot) {
         std::vector<Candidate> candidates;
-        //candidates.reserve(num_hole);
+        //candidates.reserve(num_slot);
         candidates.resize(BUF_SIZE);
         int32_t num_found_with_basic = 0;
         int32_t num_found_with_single = 0;
@@ -327,7 +328,7 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
             for (auto j = 0; j < GRID_SIZE; ++j)
             {
                 if (at(i, j) != 0) {
-                    // not a hole
+                    // not a slot
                     continue;
                 }
                 bool square_found = false;
@@ -420,19 +421,19 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
                 }
             }
         }
-        previous_num_hole = num_hole;
-        num_hole = get_num_hole();
+        previous_num_slot = num_slot;
+        num_slot = get_num_slot();
 
         // std::cout<< "basic="<<num_found_with_basic
         //          << " single="<<num_found_with_single
-        //          << " remaining_holes="<<num_hole<<"\n";
-        if (num_hole == 0) {
+        //          << " remaining_slots="<<num_slot<<"\n";
+        if (num_slot == 0) {
             std::cout<<"solved!\n";
             break;
         }
 
     }
-    if (num_hole != 0) {
+    if (num_slot != 0) {
         // basic heuristic not enough
         // try to to perform arbitrary filling and backtrack if not working
         std::vector<Candidate> candidates;
@@ -471,20 +472,20 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
                 g.set(c.i, c.j, v);
                 std::vector<Candidate> cc;
                 g.fill_basic_candidates(cc);
-                auto new_holes = g.get_num_hole();
-                c.won_holes += num_hole - new_holes;
+                auto new_slots = g.get_num_slot();
+                c.won_slots += num_slot - new_slots;
             }
-            c.won_holes -= c.values.size();
+            c.won_slots -= c.values.size();
         }
 
         std::sort(
             candidates2.begin(),
             candidates2.end(),
             [](const auto &a, const auto &b) {
-                if (a.won_holes > b.won_holes) {
+                if (a.won_slots > b.won_slots) {
                     return true;
                 }
-                if (a.won_holes < b.won_holes) {
+                if (a.won_slots < b.won_slots) {
                     return false;
                 }
                 return a.values.size() < b.values.size();
@@ -494,7 +495,7 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
             // for (auto &v: c.values) {
             //     std::cout<<(int)v<< " ";
             // }
-            // std::cout<<"] won_holes="<<c.won_holes<<"\n";
+            // std::cout<<"] won_slots="<<c.won_slots<<"\n";
         }
 
 
@@ -511,7 +512,7 @@ void Grid::solve(std::unordered_map<std::string,bool> &already_done, std::string
 
                 // std::cout<<"key="<<key<<" q="<<q<<"\n";
                 g.solve(already_done, q, depth+1);
-                if (g.get_num_hole() == 0) {
+                if (g.get_num_slot() == 0) {
                     *this = g;
                     return;
                 }
