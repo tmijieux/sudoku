@@ -93,23 +93,6 @@ void Grid::read()
         }
     }
 }
-
-// void draw_top() {
-//     std::cout <<"╔═══╤═══╤═══╦═══╤═══╤═══╦═══╤═══╤═══╗\n";
-// }
-
-// void draw_bot() {
-//     std::cout <<"╚═══╧═══╧═══╩═══╧═══╧═══╩═══╧═══╧═══╝\n";
-// }
-
-// void draw_mid() {
-//     std::cout <<"╠═══╪═══╪═══╬═══╪═══╪═══╬═══╪═══╪═══╣\n";
-// }
-
-// void draw_regular() {
-//     std::cout <<"╟───┼───┼───╫───┼───┼───╫───┼───┼───╢\n";
-// }
-// heavy
 void draw_top() {
     std::cout <<"┏━━━┯━━━┯━━━┳━━━┯━━━┯━━━┳━━━┯━━━┯━━━┓\n";
 }
@@ -345,7 +328,6 @@ void Grid::solve(
     std::vector<Candidate> candidates;
     candidates.resize(BUF_SIZE);
 
-    // std::cout<<num_slot<<" slots !\n";
     while (num_slot != previous_num_slot)
     {
         previous_num_slot = num_slot;
@@ -370,7 +352,6 @@ void Grid::solve(
                     pos = j;
                 }
             }
-            //std::cout<<"candidate v="<<v<< " in row "<<i<<" num="<<num_appearing<<"\n";
             if (num_appearing == 1) {
                 set(i, pos, v);
                 candidates[i*GRID_SIZE+pos].values.clear();
@@ -387,7 +368,6 @@ void Grid::solve(
                     pos = j;
                 }
             }
-            //std::cout<<"candidate v="<<v<< " in col "<<i<<" num="<<num_appearing<<"\n";
             if (num_appearing == 1) {
                 set(pos, i, v);
                 candidates[pos*GRID_SIZE+i].values.clear();
@@ -397,10 +377,6 @@ void Grid::solve(
         }
     }
     num_slot = get_num_slot();
-
-    // std::cout<< "basic="<<num_found_with_basic
-    //          << " single="<<num_found_with_single
-    //          << " remaining_slots="<<num_slot<<"\n";
     if (num_slot == 0) {
         std::cout<<"solved!\n";
         return;
@@ -414,22 +390,11 @@ void Grid::solve(
         auto &c = candidates[i*GRID_SIZE+j];
         auto size = c.values.size();
         if (size > 0) {
-            // std::cout <<"at ("<<i<<","<<j<<") num_candidates="<<size<< " [ ";
-            // for (auto &v: c.values) {
-            //     std::cout<<(int)v<< " ";
-            // }
-            // std::cout<<"]\n";
             c.i = i;
             c.j = j;
             candidates2.push_back(c);
         }
     }
-    std::sort(
-        candidates2.begin(),
-        candidates2.end(),
-        [](const auto &a, const auto &b) {
-            return a.values.size() < b.values.size();
-        });
 
     for (auto &c : candidates2) {
         for (auto &v : c.values) {
@@ -455,13 +420,6 @@ void Grid::solve(
             }
             return a.values.size() < b.values.size();
         });
-    for (auto &c : candidates2) {
-        // std::cout <<"at ("<<c.i<<","<<c.j<<") num_candidates="<<c.values.size()<< " [ ";
-        // for (auto &v: c.values) {
-        //     std::cout<<(int)v<< " ";
-        // }
-        // std::cout<<"] won_slots="<<c.won_slots<<"\n";
-    }
 
     for (auto &c : candidates2)
     {
@@ -469,20 +427,16 @@ void Grid::solve(
         {
             Grid g = *this;
             g.set(c.i, c.j, v);
-            // std::cout<<"try SET "<<(int)v<< " at ("<<c.i<<","<<c.j<<") at depth="<<depth<<"\n";
             std::string q = key;
             q[c.i*GRID_SIZE+c.j+c.i] = to_rep_simple(v)[0];
             if (q == key) {
                 throw std::exception();
             }
-
-            // std::cout<<"key="<<key<<" q="<<q<<"\n";
             g.solve(already_done, q, depth+1);
             if (g.get_num_slot() == 0) {
                 *this = g;
                 return;
             }
-            //g.set(c.i, c.j, 0);
         }
     }
 }
